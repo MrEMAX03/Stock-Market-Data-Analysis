@@ -10,29 +10,38 @@ def download_data(ticker: str) -> dict:
     Fetch historical stock data for the given ticker from Nasdaq API.
 
     Args:
-        ticker (str): ticker symbol (e.g., AAPL, MSFT, GOOGL, AMZN, TSLA)
+        ticker (str): Ticker symbol (e.g., AAPL, MSFT, GOOGL, AMZN, TSLA)
 
     Returns:
-        (dict): a dictionary containing stock prices over a specified period (e.g., 5 years)
+        dict: A dictionary containing stock prices over a specified period (e.g., 5 years) or an error message.
     """
     ticker = ticker.upper()
     today = date.today()
-    start = str(today.replace(year=today.year - 5))  # To get data from last five years onwards
+    start = str(today.replace(year=today.year - 5))  # Get data from the last five years
     path = f"/api/quote/{ticker}/historical?assetclass=stocks&fromdate={start}&limit=9999"
     
     url = BASE_URL + path
-
-    # I had some issues running the code without the following 3 lines.
-    # I did some researches and found that some APIs require a User-Agent to allow access.
-    # For this reason, I asked ChatGPT to create the three lines below.
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-
+    
     try:
         response = requests.get(url, headers=headers)
-        response.raise_for_status()  # Will raise an error if status code is 4xx/5xx
-        return response.json()
+        response.raise_for_status()
+        data = response.json()
+        
+        # Check if API returned an error message
+        if data.get("status", {}).get("rCode") != 200:
+            error_details = data.get("status", {}).get("bCodeMessage", [])
+            error_message = error_details[0]["errorMessage"] if error_details else "Unknown error."
+            return {"error": f"API error for {ticker}: {error_message}"}
+        
+        # Ensure data is present
+        if not data.get("data"):
+            return {"error": f"No data available for {ticker}."}
+        
+        return data["data"]
+    
     except requests.exceptions.RequestException as e:
         return {"error": f"Error fetching data for {ticker}: {str(e)}"}
     
@@ -73,7 +82,7 @@ def compute_median(ls: list) -> float:
         middle_right = sorted_ls[n // 2]
         return (middle_left + middle_right) / 2
 
-def data_processing2(data: dict, tickers: list[str])->list[dict]:
+def data_processing(data: dict, tickers: list[str])->list[dict]:
     """
     This function completes the core part of this assignment: data processing. Using helper functions,
     it extract closing prices from the raw data, and compute several statistical measures (e.g., 
@@ -112,43 +121,6 @@ def data_processing2(data: dict, tickers: list[str])->list[dict]:
         ls.append(ticker_dict)
 
     return ls
-
-def data_processing(data: dict, tickers: list[str]) -> list[dict]:
-    """
-    This function completes the core part of this assignment: data processing. Using helper functions,
-    it extract closing prices from the raw data, and compute several statistical measures (e.g., 
-    min, max, average, and median) of the data.
-    
-    Args:
-        data (dict): the dictionary containing all the data.
-        tickers (list[str]): the list containing all the tickers we want to analyze.
-    
-    Returns:
-        (list[dict]): list of dictionary containing the various statistical measures for each ticker.
-    """
-    ls = []
-    for ticker in tickers:
-        if data[ticker] is None:  # Handle invalid tickers
-            print(f"Skipping {ticker} due to missing data.")
-            continue
-
-        try:
-            closing = extract_close(data[ticker]['data']['tradesTable']['rows'])
-
-            ticker_dict = {
-                'min': min(closing),
-                'max': max(closing),
-                'avg': sum(closing) / len(closing),  # Fix division by total records
-                'median': compute_median(closing),  # Fix spelling from "medium" to "median"
-                'ticker': ticker
-            }
-            ls.append(ticker_dict)
-        except KeyError:
-            print(f"Error processing data for {ticker}. Skipping.")
-            continue  # Skip invalid tickers safely
-
-    return ls
-
 
 def write_to_json(stocks_data: list[dict], file_path: str) -> None:
     """
@@ -194,6 +166,7 @@ def process_tickers(tickers: list) -> list:
 
 # Get ticker symbols from command-line arguments (excluding the script name)
 tickers = sys.argv[1:]
+
 
 if tickers:
     # Process the tickers and prepare stock data
