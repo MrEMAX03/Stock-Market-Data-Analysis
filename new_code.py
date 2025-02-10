@@ -7,6 +7,9 @@ Description:    This program downloads data related to some ticker given by the 
                 computes some statistical measures.
 Class: DS 244
 Date: 02-10-2025
+
+Note: THIS IS THE FINAL VERSION OF THE ASSIGNMENT!
+To get ticker symbols from command-line arguments, AI has been used.
 """
 
 import requests
